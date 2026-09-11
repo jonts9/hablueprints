@@ -1,0 +1,152 @@
+blueprint:
+  name: Desligar luzes por ausência de movimento (time_pattern)
+  description: >-
+    Verifica periodicamente se o sensor de movimento está inativo por um tempo
+    configurado e, se positivo, desliga as luzes correspondentes. Inclui
+    controle de desligamento manual via input_boolean e notificações opcionais.
+  domain: automation
+  input:
+    motion_sensor:
+      name: Sensor de movimento
+      description: Sensor(es) que detectam presença no ambiente.
+      selector:
+        entity:
+          domain: binary_sensor
+          device_class:
+            - motion
+            - occupancy
+          multiple: true
+    target_lights:
+      name: Luzes do ambiente
+      description: Luz(es) que serão desligadas após a ausência.
+      selector:
+        entity:
+          domain: light
+          multiple: true
+    manual_helpers:
+      name: Helpers de controle manual
+      description: >-
+        Input booleans usados para evitar que a automação ligue as luzes
+        quando desligadas manualmente. Selecione na mesma ordem das luzes.
+      selector:
+        entity:
+          domain: input_boolean
+          multiple: true
+    no_motion_duration:
+      name: Tempo sem movimento
+      description: Tempo que o sensor deve permanecer inativo para desligar.
+      default:
+        hours: 0
+        minutes: 5
+        seconds: 0
+      selector:
+        duration: {}
+    check_interval:
+      name: Frequência de verificação
+      description: Com que frequência verificar a ausência de movimento.
+      default: 30
+      selector:
+        number:
+          min: 10
+          max: 300
+          unit_of_measurement: seconds
+    alexa_notify_target:
+      name: Entidade de notificação Alexa (opcional)
+      description: Deixe vazio para desabilitar a notificação via Alexa.
+      default: []
+      selector:
+        entity:
+          domain: notify
+          multiple: true
+    alexa_message:
+      name: Mensagem Alexa (opcional)
+      description: Texto falado pela Alexa ao desligar por ausência.
+      default: "Esqueceram a luz ligada"
+      selector:
+        text: {}
+    telegram_chat_id:
+      name: Chat ID do Telegram (opcional)
+      description: Deixe vazio para desabilitar notificações via Telegram.
+      default: ""
+      selector:
+        text: {}
+    telegram_message:
+      name: Mensagem Telegram (opcional)
+      description: Texto enviado via Telegram ao desligar por ausência.
+      default: "Luz apagada por ausência de movimento"
+      selector:
+        text: {}
+
+mode: single
+max_exceeded: silent
+
+variables:
+  motion_sensor: !input motion_sensor
+  target_lights: !input target_lights
+  manual_helpers: !input manual_helpers
+  no_motion_duration: !input no_motion_duration
+  alexa_notify_target: !input alexa_notify_target
+  telegram_chat_id: !input telegram_chat_id
+
+triggers:
+  - trigger: time_pattern
+    seconds: !input check_interval
+
+conditions:
+  - condition: template
+    value_template: >-
+      {{ target_lights | select('is_state', 'on') | list | count > 0 }}
+  - condition: template
+    value_template: >-
+      {{ motion_sensor | expand | selectattr('state', 'eq', 'on') | list | count == 0 }}
+  - condition: template
+    value_template: >-
+      {% set last_changed = motion_sensor | expand | map(attribute='last_changed') | list %}
+      {% if last_changed | count == 0 %}
+        {{ false }}
+      {% else %}
+        {{ (now() - last_changed | max).total_seconds() >= 
+           (no_motion_duration.hours | default(0) | int * 3600) +
+           (no_motion_duration.minutes | default(0) | int * 60) +
+           (no_motion_duration.seconds | default(0) | int) }}
+      {% endif %}
+
+actions:
+  - action: input_boolean.turn_on
+    data: {}
+    target:
+      entity_id: "{{ manual_helpers }}"
+  - action: light.turn_off
+    data: {}
+    target:
+      entity_id: "{{ target_lights }}"
+  - delay: "00:00:02"
+  - if:
+      - condition: template
+        value_template: "{{ alexa_notify_target | count > 0 }}"
+    then:
+      - repeat:
+          for_each: "{{ alexa_notify_target }}"
+          sequence:
+            - action: "{{ repeat.item }}"
+              data:
+                message: >-
+                  <speak><amazon:effect name='whispered'><prosody rate='80%'>
+                  {{ alexa_message }}</prosody></amazon:effect></speak>
+                data:
+                  type: tts
+              continue_on_error: true
+  - if:
+      - condition: template
+        value_template: "{{ telegram_chat_id | trim != '' }}"
+    then:
+      - action: telegram_bot.send_message
+        data:
+          chat_id: "{{ telegram_chat_id | int }}"
+          message: "🌑 {{ telegram_message }}"
+        continue_on_error: true
+  - delay: "00:00:02"
+  - action: input_boolean.turn_off
+    data: {}
+    target:
+      entity_id: "{{ manual_helpers }}"
