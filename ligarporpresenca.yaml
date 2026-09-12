@@ -1,0 +1,88 @@
+blueprint:
+  name: Ligar luzes por presença
+  description: >-
+    Liga uma ou mais luzes ao detectar movimento, mas apenas as luzes cujo
+    helper (input_boolean) de "desligada manualmente" estiver OFF — ou seja,
+    respeita o desligamento manual em vez de forçar todas as luzes a
+    acenderem. Selecione target_lights e manual_helpers na mesma ordem
+    (posição N de uma lista corresponde à posição N da outra). Inclui
+    restrições opcionais de horário/sol, desabilitadas por padrão.
+  domain: automation
+  input:
+    motion_sensor:
+      name: Sensor de movimento
+      description: Sensor(es) que, ao detectarem presença, disparam a checagem.
+      selector:
+        entity:
+          domain: binary_sensor
+          device_class:
+            - motion
+            - occupancy
+          multiple: true
+    target_lights:
+      name: Luzes do ambiente
+      description: Luz(es) candidatas a acender.
+      selector:
+        entity:
+          domain: light
+          multiple: true
+    manual_helpers:
+      name: Input booleans de flag
+      description: >-
+        Helper(s) de "desligada manualmente". Selecione na MESMA ORDEM das
+        luzes acima (1ª luz -> 1º helper, 2ª luz -> 2º helper, etc). A luz só
+        acende se o helper correspondente estiver OFF.
+      selector:
+        entity:
+          domain: input_boolean
+          multiple: true
+    restrict_after_sunset:
+      name: Restringir a após o pôr do sol (opcional)
+      description: Se ativado, só acende as luzes depois do pôr do sol.
+      default: false
+      selector:
+        boolean: {}
+    restrict_before_time:
+      name: Restringir a um horário limite (opcional)
+      description: Se ativado, só acende as luzes antes do horário definido abaixo.
+      default: false
+      selector:
+        boolean: {}
+    before_time:
+      name: Horário limite
+      description: Usado apenas se "Restringir a um horário limite" estiver ativado.
+      default: "23:00:00"
+      selector:
+        time: {}
+
+mode: single
+
+variables:
+  target_lights: !input target_lights
+  manual_helpers: !input manual_helpers
+
+triggers:
+  - trigger: state
+    entity_id: !input motion_sensor
+    to: "on"
+
+conditions:
+  - condition: sun
+    after: sunset
+    enabled: !input restrict_after_sunset
+  - condition: time
+    before: !input before_time
+    enabled: !input restrict_before_time
+
+actions:
+  - repeat:
+      for_each: "{{ range(target_lights | count) | list }}"
+      sequence:
+        - if:
+            - condition: template
+              value_template: "{{ is_state(manual_helpers[repeat.item], 'off') }}"
+          then:
+            - action: light.turn_on
+              target:
+                entity_id: "{{ target_lights[repeat.item] }}"
+              data: {}
