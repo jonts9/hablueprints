@@ -44,12 +44,28 @@ blueprint:
     check_interval:
       name: Frequência de verificação
       description: Com que frequência verificar a ausência de movimento.
-      default: 30
+      default: "/30"
       selector:
-        number:
-          min: 10
-          max: 300
-          unit_of_measurement: seconds
+        select:
+          options:
+            - label: "10 segundos"
+              value: "/10"
+            - label: "30 segundos"
+              value: "/30"
+            - label: "1 minuto"
+              value: "/60"
+            - label: "5 minutos"
+              value: "/300"
+            - label: "10 minutos"
+              value: "/600"
+            - label: "15 minutos"
+              value: "/900"
+            - label: "20 minutos"
+              value: "/1200"
+            - label: "30 minutos"
+              value: "/1800"
+            - label: "1 hora"
+              value: "/3600"
     alexa_notify_target:
       name: Entidade de notificação Alexa (opcional)
       description: Deixe vazio para desabilitar a notificação via Alexa.
