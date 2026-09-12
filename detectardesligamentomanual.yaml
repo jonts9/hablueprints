@@ -1,0 +1,55 @@
+blueprint:
+  name: Detectar desligamento manual da luz
+  description: >-
+    Detecta quando uma ou mais luzes são desligadas e sinaliza isso ligando o
+    input_boolean correspondente, usado como flag para outras automações
+    (ex: presença) saberem que o desligamento foi manual e não devem religar
+    a luz. Suporta 1 ou várias luzes — selecione target_lights e
+    manual_helpers na mesma ordem (posição N de uma lista corresponde à
+    posição N da outra).
+  domain: automation
+  input:
+    target_lights:
+      name: Luzes monitoradas
+      description: Luz(es) que, ao serem desligadas, acionam a flag correspondente.
+      selector:
+        entity:
+          domain: light
+          multiple: true
+    manual_helpers:
+      name: Input booleans de flag
+      description: >-
+        Helper(s) que serão ligados quando a luz correspondente for
+        desligada. Selecione na MESMA ORDEM das luzes acima (1ª luz -> 1º
+        helper, 2ª luz -> 2º helper, etc). Cada helper deve estar desligado
+        para a automação disparar (evita retrigger desnecessário).
+      selector:
+        entity:
+          domain: input_boolean
+          multiple: true
+
+mode: queued
+max: 10
+
+variables:
+  target_lights: !input target_lights
+  manual_helpers: !input manual_helpers
+
+triggers:
+  - trigger: state
+    entity_id: !input target_lights
+    to: "off"
+
+conditions:
+  - condition: template
+    value_template: >-
+      {% set idx = target_lights.index(trigger.entity_id) %}
+      {{ is_state(manual_helpers[idx], 'off') }}
+
+actions:
+  - action: input_boolean.turn_on
+    target:
+      entity_id: >-
+        {% set idx = target_lights.index(trigger.entity_id) %}
+        {{ manual_helpers[idx] }}
+    data: {}
