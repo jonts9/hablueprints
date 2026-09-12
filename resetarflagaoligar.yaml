@@ -1,0 +1,47 @@
+blueprint:
+  name: Resetar flag ao ligar a luz
+  description: >-
+    Ao ligar uma luz (manualmente ou por qualquer automação), desliga o
+    input_boolean correspondente que sinaliza "desligada manualmente" —
+    resetando o estado para que as automações de presença voltem a poder
+    controlar essa luz normalmente. Suporta 1 ou várias luzes — selecione
+    target_lights e manual_helpers na mesma ordem.
+  domain: automation
+  input:
+    target_lights:
+      name: Luzes monitoradas
+      description: Luz(es) que, ao serem ligadas, resetam a flag correspondente.
+      selector:
+        entity:
+          domain: light
+          multiple: true
+    manual_helpers:
+      name: Input booleans de flag
+      description: >-
+        Helper(s) que serão desligados quando a luz correspondente for
+        ligada. Selecione na MESMA ORDEM das luzes acima (1ª luz -> 1º
+        helper, 2ª luz -> 2º helper, etc).
+      selector:
+        entity:
+          domain: input_boolean
+          multiple: true
+
+mode: queued
+max: 10
+
+variables:
+  target_lights: !input target_lights
+  manual_helpers: !input manual_helpers
+
+triggers:
+  - trigger: state
+    entity_id: !input target_lights
+    to: "on"
+
+actions:
+  - action: input_boolean.turn_off
+    target:
+      entity_id: >-
+        {% set idx = target_lights.index(trigger.entity_id) %}
+        {{ manual_helpers[idx] }}
+    data: {}
