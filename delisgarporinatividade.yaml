@@ -16,12 +16,14 @@ blueprint:
             - motion
             - occupancy
           multiple: true
-    target_lights:
+    target_entities:
       name: Luzes do ambiente
       description: Luz(es) que serão desligadas após a ausência.
       selector:
         entity:
-          domain: light
+          domain:
+            - light
+            - switch
           multiple: true
     manual_helpers:
       name: Helpers de controle manual
@@ -98,7 +100,7 @@ max_exceeded: silent
 
 variables:
   motion_sensor: !input motion_sensor
-  target_lights: !input target_lights
+  target_entities: !input target_entities
   manual_helpers: !input manual_helpers
   no_motion_duration: !input no_motion_duration
   alexa_notify_target: !input alexa_notify_target
@@ -111,7 +113,7 @@ triggers:
 conditions:
   - condition: template
     value_template: >-
-      {{ target_lights | select('is_state', 'on') | list | count > 0 }}
+      {{ target_entities | select('is_state', 'on') | list | count > 0 }}
   - condition: template
     value_template: >-
       {{ motion_sensor | expand | selectattr('state', 'eq', 'on') | list | count == 0 }}
@@ -132,10 +134,10 @@ actions:
     data: {}
     target:
       entity_id: "{{ manual_helpers }}"
-  - action: light.turn_off
+  - action: homeassistant.turn_off
     data: {}
     target:
-      entity_id: "{{ target_lights }}"
+      entity_id: "{{ target_entities }}"
   - delay: "00:00:02"
   - if:
       - condition: template
