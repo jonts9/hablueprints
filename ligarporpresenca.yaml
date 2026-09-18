@@ -4,7 +4,7 @@ blueprint:
     Liga uma ou mais luzes ao detectar movimento, mas apenas as luzes cujo
     helper (input_boolean) de "desligada manualmente" estiver OFF — ou seja,
     respeita o desligamento manual em vez de forçar todas as luzes a
-    acenderem. Selecione target_lights e manual_helpers na mesma ordem
+    acenderem. Selecione target_entities e manual_helpers na mesma ordem
     (posição N de uma lista corresponde à posição N da outra). Inclui
     restrições opcionais de horário/sol, desabilitadas por padrão.
   domain: automation
@@ -19,12 +19,14 @@ blueprint:
             - motion
             - occupancy
           multiple: true
-    target_lights:
+    target_entities:
       name: Luzes do ambiente
       description: Luz(es) candidatas a acender.
       selector:
         entity:
-          domain: light
+          domain:
+            - light
+            - switch
           multiple: true
     manual_helpers:
       name: Input booleans de flag
@@ -58,7 +60,7 @@ blueprint:
 mode: single
 
 variables:
-  target_lights: !input target_lights
+  target_entities: !input target_entities
   manual_helpers: !input manual_helpers
 
 triggers:
@@ -76,13 +78,13 @@ conditions:
 
 actions:
   - repeat:
-      for_each: "{{ range(target_lights | count) | list }}"
+      for_each: "{{ range(target_entities | count) | list }}"
       sequence:
         - if:
             - condition: template
               value_template: "{{ is_state(manual_helpers[repeat.item], 'off') }}"
           then:
-            - action: light.turn_on
+            - action: homeassistant.turn_on
               target:
-                entity_id: "{{ target_lights[repeat.item] }}"
+                entity_id: "{{ target_entities[repeat.item] }}"
               data: {}
