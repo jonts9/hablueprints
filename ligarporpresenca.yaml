@@ -1,12 +1,11 @@
 blueprint:
   name: Ligar luzes por presença
   description: >-
-    Liga uma ou mais luzes ao detectar movimento, mas apenas as luzes cujo
-    helper (input_boolean) de "desligada manualmente" estiver OFF — ou seja,
-    respeita o desligamento manual em vez de forçar todas as luzes a
-    acenderem. Selecione target_entities e manual_helpers na mesma ordem
-    (posição N de uma lista corresponde à posição N da outra). Inclui
-    restrições opcionais de horário/sol, desabilitadas por padrão.
+    Liga uma ou mais luzes/switches ao detectar movimento, mas apenas os
+    cujo helper (input_boolean) de "desligada manualmente" estiver OFF.
+    Selecione target_entities e manual_helpers na mesma ordem (posição N de
+    uma lista corresponde à posição N da outra). Só atua dentro da janela
+    de funcionamento configurada (padrão: do pôr do sol até 23:00).
   domain: automation
   input:
     motion_sensor:
@@ -21,7 +20,7 @@ blueprint:
           multiple: true
     target_entities:
       name: Luzes do ambiente
-      description: Luz(es) candidatas a acender.
+      description: Luz(es)/switch(es) candidatos a ligar.
       selector:
         entity:
           domain:
@@ -32,27 +31,31 @@ blueprint:
       name: Input booleans de flag
       description: >-
         Helper(s) de "desligada manualmente". Selecione na MESMA ORDEM das
-        luzes acima (1ª luz -> 1º helper, 2ª luz -> 2º helper, etc). A luz só
-        acende se o helper correspondente estiver OFF.
+        entidades acima. A entidade só liga se o helper correspondente
+        estiver OFF.
       selector:
         entity:
           domain: input_boolean
           multiple: true
-    restrict_after_sunset:
-      name: Restringir a após o pôr do sol (opcional)
-      description: Se ativado, só acende as luzes depois do pôr do sol.
-      default: false
+    use_sunset_start:
+      name: Iniciar no pôr do sol
+      description: >-
+        Se ativado, a janela começa no pôr do sol (e o "Horário de início"
+        é ignorado). Neste modo o horário de fim deve ser antes da meia-noite.
+      default: true
       selector:
         boolean: {}
-    restrict_before_time:
-      name: Restringir a um horário limite (opcional)
-      description: Se ativado, só acende as luzes antes do horário definido abaixo.
-      default: false
+    start_time:
+      name: Horário de início
+      description: Usado apenas se "Iniciar no pôr do sol" estiver desativado.
+      default: "18:00:00"
       selector:
-        boolean: {}
-    before_time:
-      name: Horário limite
-      description: Usado apenas se "Restringir a um horário limite" estiver ativado.
+        time: {}
+    end_time:
+      name: Horário de fim
+      description: >-
+        Fim da janela de funcionamento. Com início em horário fixo, pode
+        cruzar a meia-noite (ex: início 18:00, fim 02:00).
       default: "23:00:00"
       selector:
         time: {}
@@ -62,6 +65,7 @@ mode: single
 variables:
   target_entities: !input target_entities
   manual_helpers: !input manual_helpers
+  use_sunset_start: !input use_sunset_start
 
 triggers:
   - trigger: state
@@ -69,12 +73,25 @@ triggers:
     to: "on"
 
 conditions:
-  - condition: sun
-    after: sunset
-    enabled: !input restrict_after_sunset
-  - condition: time
-    before: !input before_time
-    enabled: !input restrict_before_time
+  - condition: or
+    conditions:
+      # Modo pôr do sol: sunset -> end_time (até a meia-noite)
+      - condition: and
+        conditions:
+          - condition: template
+            value_template: "{{ use_sunset_start }}"
+          - condition: sun
+            after: sunset
+          - condition: time
+            before: !input end_time
+      # Modo horário fixo: start_time -> end_time (pode cruzar a meia-noite)
+      - condition: and
+        conditions:
+          - condition: template
+            value_template: "{{ not use_sunset_start }}"
+          - condition: time
+            after: !input start_time
+            before: !input end_time
 
 actions:
   - repeat:
